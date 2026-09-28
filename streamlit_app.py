@@ -7,7 +7,7 @@ secrets as GEMINI_API_KEY (App settings -> Secrets).
 import requests
 import streamlit as st
 
-GEMINI_URL = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent"
+GEMINI_URL = "https://generativelanguage.googleapis.com/v1beta/models/gemini-3.8-flash:generateContent"
 SYSTEM_PROMPT = "You are a helpful assistant."
 
 st.set_page_config(page_title="Gemini Chat", page_icon="💬")
