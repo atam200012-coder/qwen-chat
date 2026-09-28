@@ -4,7 +4,8 @@ Runs on Streamlit Community Cloud (free tier).
 
 - Chat with any free OpenRouter model (picker at the top; the list refreshes
   automatically from OpenRouter, with a built-in fallback).
-- Quick links to my own AI accounts below the chat.
+- "About me" box in the sidebar: write once per visit, it is attached to
+  every message as a personal system prompt.
 
 The API key lives in Streamlit Secrets as OPENROUTER_API_KEY
 (App settings -> Secrets). It is never written into the code.
@@ -16,7 +17,7 @@ import streamlit as st
 OPENROUTER_CHAT_URL = "https://openrouter.ai/api/v1/chat/completions"
 OPENROUTER_MODELS_URL = "https://openrouter.ai/api/v1/models"
 
-SYSTEM_PROMPT = "You are a helpful assistant."
+BASE_SYSTEM_PROMPT = "You are a helpful assistant."
 
 # Verified 2026-09-29; used only if the live model list cannot be fetched.
 FALLBACK_FREE_MODELS = [
@@ -57,17 +58,6 @@ FRIENDLY_NAMES = {
     "thinkingmachines/inkling-small:free": "Thinking Machines Inkling Small",
 }
 
-MY_AIS = [
-    ("Poe", "https://poe.com"),
-    ("Perplexity", "https://www.perplexity.ai"),
-    ("Claude", "https://claude.ai"),
-    ("Gemini", "https://gemini.google.com"),
-    ("Kimi", "https://www.kimi.com"),
-    ("Grok", "https://grok.com"),
-    ("DeepSeek", "https://chat.deepseek.com"),
-    ("Le Chat", "https://chat.mistral.ai"),
-]
-
 
 def _pretty(model_id: str) -> str:
     if model_id in FRIENDLY_NAMES:
@@ -98,6 +88,13 @@ def _api_key() -> str:
     return (key or "").strip()
 
 
+def _system_prompt() -> str:
+    about = (st.session_state.get("about_me") or "").strip()
+    if about:
+        return BASE_SYSTEM_PROMPT + "\n\nAbout the user - always follow these instructions:\n" + about
+    return BASE_SYSTEM_PROMPT
+
+
 def _ask(messages, model_id: str, api_key: str) -> str:
     try:
         resp = requests.post(
@@ -125,24 +122,47 @@ def _ask(messages, model_id: str, api_key: str) -> str:
 
 
 st.set_page_config(page_title="At Am's AI Hub", page_icon="🤖")
+
+# Tidy only: hide Streamlit's default menu and footer. No decorative styling.
+st.markdown(
+    """
+    <style>
+    #MainMenu {visibility: hidden;}
+    footer {visibility: hidden;}
+    </style>
+    """,
+    unsafe_allow_html=True,
+)
+
 st.title("🤖 At Am's AI Hub")
-st.caption("My private AI center - free models on top, my AI accounts below.")
+st.caption("ကိုယ့်ရဲ့ AI center — အလကား AI model တွေနဲ့ စကားပြောပါ။")
+
+if "about_me" not in st.session_state:
+    st.session_state.about_me = ""
+if "messages" not in st.session_state:
+    st.session_state.messages = []
+
+with st.sidebar:
+    st.subheader("📝 ကိုယ့်အကြောင်း")
+    st.caption("တစ်ခါရေး — ဒီတစ်ခေါက်စကားတိုင်း အလိုလိုတွဲပို့မယ်။")
+    st.text_area(
+        "about_me",
+        label_visibility="collapsed",
+        placeholder="ဥပမာ - နာမည် At Am၊ မြန်မာလိုပြော၊ တိုတိုရှင်းရှင်းဖြေ",
+        key="about_me",
+    )
 
 models = _free_models()
 default_idx = models.index("qwen/qwen3.8-27b:free") if "qwen/qwen3.8-27b:free" in models else 0
 model_id = st.selectbox("Choose a model", models, index=default_idx, format_func=_pretty)
 
-if st.button("Clear chat"):
-    st.session_state.messages = [{"role": "system", "content": SYSTEM_PROMPT}]
+if st.button("🧹 Clear chat"):
+    st.session_state.messages = []
     st.rerun()
 
-if "messages" not in st.session_state:
-    st.session_state.messages = [{"role": "system", "content": SYSTEM_PROMPT}]
-
 for msg in st.session_state.messages:
-    if msg["role"] != "system":
-        with st.chat_message(msg["role"]):
-            st.markdown(msg["content"])
+    with st.chat_message(msg["role"]):
+        st.markdown(msg["content"])
 
 if prompt := st.chat_input("Ask anything..."):
     st.session_state.messages.append({"role": "user", "content": prompt})
@@ -153,18 +173,11 @@ if prompt := st.chat_input("Ask anything..."):
     if not api_key:
         reply = "OPENROUTER_API_KEY is not set. Add it under the app's Settings -> Secrets."
     else:
+        payload = [{"role": "system", "content": _system_prompt()}] + st.session_state.messages
         with st.chat_message("assistant"):
             with st.spinner(f"{_pretty(model_id)} is thinking..."):
-                reply = _ask(st.session_state.messages, model_id, api_key)
+                reply = _ask(payload, model_id, api_key)
             st.markdown(reply)
     st.session_state.messages.append({"role": "assistant", "content": reply})
-
-st.divider()
-st.subheader("My AIs")
-st.caption("My own accounts - tap to open.")
-cols = st.columns(4)
-for i, (name, url) in enumerate(MY_AIS):
-    with cols[i % 4]:
-        st.link_button(name, url, use_container_width=True)
 
 st.caption("Chat uses free OpenRouter models. Keys stay in Secrets, never in code.")
